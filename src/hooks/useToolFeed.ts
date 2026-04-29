@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useReducer } from "react";
-import { Room, RoomEvent } from "livekit-client";
+import { useReducer } from "react";
 import type { ToolEvent } from "@/types";
 
 type Action =
@@ -31,44 +30,12 @@ function reducer(state: ToolEvent[], action: Action): ToolEvent[] {
   }
 }
 
-export function useToolFeed(
-  room: Room | null,
-  onSummaryReady: (sessionId: string) => void
-) {
+export function useToolFeed(onSummaryReady: (sessionId: string) => void) {
   const [events, dispatch] = useReducer(reducer, []);
 
-  useEffect(() => {
-    if (!room) return;
-
-    function onData(payload: Uint8Array) {
-      try {
-        const msg = JSON.parse(new TextDecoder().decode(payload));
-
-        if (msg.type === "tool_call") {
-          dispatch({
-            type: "UPSERT",
-            event: {
-              id: `${msg.tool}-${Date.now()}`,
-              type: "tool_call",
-              tool: msg.tool,
-              status: msg.status,
-              display: msg.display,
-              ts: Date.now(),
-            },
-          });
-        } else if (msg.type === "summary_ready") {
-          onSummaryReady(msg.session_id);
-        }
-      } catch {
-        // malformed message — ignore
-      }
-    }
-
-    room.on(RoomEvent.DataReceived, onData);
-    return () => {
-      room.off(RoomEvent.DataReceived, onData);
-    };
-  }, [room, onSummaryReady]);
+  // Tool events arrive via Tavus postMessage → addEvent() in call/page.tsx.
+  // No LiveKit data channel needed; Tavus CVI is the sole conversation pipeline.
+  void onSummaryReady; // consumed by the call page directly
 
   return {
     events,

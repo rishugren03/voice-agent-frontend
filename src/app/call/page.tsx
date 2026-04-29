@@ -1,15 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Room, RoomEvent, RemoteParticipant, Track } from "livekit-client";
+import type { DailyCall } from "@daily-co/daily-js";
 import {
-  fetchToken,
   fetchSummary,
   fetchTavusUrl,
   endTavusConversation,
   endTavusConversationForSession,
   fetchCallSessions,
   executeToolCall,
+  finishSession,
 } from "@/lib/api";
 import { useToolFeed } from "@/hooks/useToolFeed";
 import { ToolStatus } from "@/components/ToolStatus";
@@ -17,7 +17,21 @@ import { CallDetails } from "@/components/CallDetails";
 import { CallSessionsTable } from "@/components/CallSessionsTable";
 import type { CallSessionRow, SessionSummaryResponse, TranscriptItem } from "@/types";
 
-type CallState = "idle" | "connecting" | "waiting-join" | "joining" | "connected" | "ended";
+// Architecture:
+// - Tavus CVI iframe: renders avatar + handles user mic/camera + drives lip-sync.
+// - Background Daily call object (audio/video off, joined BEFORE user's iframe):
+//     • Joins first → appears as 1 guest (vs 2 guests if user joins first).
+//     • Receives all Tavus events via Daily app-message (tool calls, utterances, speaking state).
+//     • Sends tool results back via sendAppMessage.
+// - Greeting fix: custom_greeting fires to our silent call object (no audio → user misses it).
+//   We detect this and re-trigger via conversation.echo after the user's iframe joins.
+// - Summary fix: transcript is collected from app-message utterance events, so finishSession
+//   always has real content. Polling only starts AFTER the transcript is saved.
+
+type CallState = "idle" | "connecting" | "connected" | "ended";
+
+const GREETING =
+  "Hello! I'm Maya, your Mykare healthcare assistant. How can I help you today?";
 
 function randomRoomName() {
   return `mykare-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -31,20 +45,24 @@ export default function CallPage() {
   const [callDuration, setCallDuration] = useState(0);
   const [frozenDuration, setFrozenDuration] = useState(0);
   const [tavusUrl, setTavusUrl] = useState<string | null>(null);
-  const [room, setRoom] = useState<Room | null>(null);
   const [sessions, setSessions] = useState<CallSessionRow[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
+
   const tavusConvIdRef = useRef<string>("");
-  const pendingLiveKitRef = useRef<(() => Promise<void>) | null>(null);
-  const roomRef = useRef<Room | null>(null);
   const sessionIdRef = useRef<string>("");
   const summaryRequestIdRef = useRef(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tavusTranscriptRef = useRef<TranscriptItem[]>([]);
+  const callDurationRef = useRef(0);
+  const dailyCallRef = useRef<DailyCall | null>(null);
+  const speakingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Track whether the replica has spoken anything — used to detect if custom_greeting
+  // was silently consumed by our call object before the user's iframe loaded.
+  const greetingReceivedRef = useRef(false);
 
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const rafIdRef = useRef<number>(0);
+  // Stable refs so Daily app-message closure always calls the latest version.
+  const addEventRef = useRef<((e: import("@/types").ToolEvent) => void) | null>(null);
+  const handleSummaryReadyRef = useRef<((id: string) => Promise<void>) | null>(null);
 
   const loadSessions = useCallback(async () => {
     setSessionsLoading(true);
@@ -62,7 +80,7 @@ export default function CallPage() {
     summaryRequestIdRef.current = requestId;
     setSummaryGenerating(true);
 
-    for (let attemptNumber = 0; attemptNumber <= 12; attemptNumber += 1) {
+    for (let attempt = 0; attempt <= 12; attempt++) {
       try {
         const data = await fetchSummary(sessionId);
         if (summaryRequestIdRef.current !== requestId) return;
@@ -71,54 +89,153 @@ export default function CallPage() {
         await loadSessions();
         return;
       } catch {
-        if (attemptNumber === 12) {
+        if (attempt === 12) {
           if (summaryRequestIdRef.current !== requestId) return;
           setSummaryGenerating(false);
           await loadSessions();
           return;
         }
-        await new Promise((resolve) => setTimeout(resolve, 2500));
+        await new Promise((r) => setTimeout(r, 2500));
       }
     }
   }, [loadSessions]);
 
-  const { events, addEvent, clearEvents } = useToolFeed(room, handleSummaryReady);
+  const { events, addEvent, clearEvents } = useToolFeed(handleSummaryReady);
+
+  useEffect(() => { addEventRef.current = addEvent; }, [addEvent]);
+  useEffect(() => { handleSummaryReadyRef.current = handleSummaryReady; }, [handleSummaryReady]);
+
+  useEffect(() => { void loadSessions(); }, [loadSessions]);
+  useEffect(() => { callDurationRef.current = callDuration; }, [callDuration]);
 
   useEffect(() => {
-    void Promise.resolve().then(loadSessions);
-  }, [loadSessions]);
-
-  useEffect(() => {
-    if (callState === "connected" || callState === "joining") {
+    if (callState === "connected") {
       timerRef.current = setInterval(() => setCallDuration((s) => s + 1), 1000);
     } else {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
+      if (timerRef.current) clearInterval(timerRef.current);
     }
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [callState]);
 
-  function startAmplitudeLoop() {
-    const analyser = analyserRef.current;
-    if (!analyser) return;
-    const data = new Uint8Array(analyser.frequencyBinCount);
-    function loop() {
-      analyserRef.current?.getByteFrequencyData(data);
-      const slice = data.slice(0, data.length >> 1);
-      const avg = slice.reduce((a, b) => a + b, 0) / slice.length;
-      void avg; // amplitude available via analyserRef if needed later
-      rafIdRef.current = requestAnimationFrame(loop);
-    }
-    rafIdRef.current = requestAnimationFrame(loop);
+  // ── Speaking helpers ───────────────────────────────────────────────────────
+
+  function markSpeaking() {
+    if (speakingTimerRef.current) clearTimeout(speakingTimerRef.current);
+    setIsSpeaking(true);
   }
 
-  function teardownAudio() {
-    cancelAnimationFrame(rafIdRef.current);
-    audioCtxRef.current?.close();
-    audioCtxRef.current = null;
-    analyserRef.current = null;
+  function scheduleSpeakingStop(ms = 800) {
+    if (speakingTimerRef.current) clearTimeout(speakingTimerRef.current);
+    speakingTimerRef.current = setTimeout(() => setIsSpeaking(false), ms);
   }
+
+  // ── Daily app-message handler ─────────────────────────────────────────────
+  // All Tavus conversation events travel through Daily's data channel.
+
+  function handleAppMessage(rawData: unknown) {
+    if (!rawData || typeof rawData !== "object") return;
+    const msg = rawData as Record<string, unknown>;
+    const eventType = (msg.event_type ?? msg.eventType) as string | undefined;
+    if (!eventType?.startsWith("conversation.")) return;
+    const props = (msg.properties ?? {}) as Record<string, unknown>;
+
+    if (eventType === "conversation.replica.started_speaking") {
+      greetingReceivedRef.current = true;
+      markSpeaking();
+      return;
+    }
+    if (eventType === "conversation.replica.stopped_speaking") {
+      scheduleSpeakingStop(400);
+      return;
+    }
+
+    if (eventType === "conversation.utterance") {
+      const role = props.role === "replica" ? "assistant" : props.role as string;
+      const speech = (props.speech ?? props.text) as string | undefined;
+      if ((role === "user" || role === "assistant") && typeof speech === "string" && speech.trim()) {
+        if (role === "assistant") greetingReceivedRef.current = true;
+        tavusTranscriptRef.current.push({
+          role: role as "user" | "assistant",
+          content: speech,
+          ts: new Date().toISOString(),
+        });
+      }
+      if (props.role === "replica" && typeof speech === "string" && speech.trim()) {
+        markSpeaking(); scheduleSpeakingStop(1500);
+      } else if (props.role === "user") {
+        scheduleSpeakingStop(200);
+      }
+      return;
+    }
+
+    if (eventType === "conversation.ended") {
+      void endCall();
+      return;
+    }
+
+    if (eventType === "conversation.tool_call") {
+      const fn = props.function && typeof props.function === "object"
+        ? props.function as Record<string, unknown> : {};
+      const tool = (props.name ?? props.tool_name ?? fn.name) as string | undefined;
+      const args = normalizeArgs(props.arguments ?? fn.arguments ?? {});
+      const toolCallId = (props.id ?? props.tool_call_id ?? "") as string;
+
+      if (typeof tool !== "string" || !sessionIdRef.current) return;
+
+      addEventRef.current?.({
+        id: `${tool}-${Date.now()}-pending`,
+        type: "tool_call", tool, status: "pending",
+        display: tool === "end_conversation" ? "Generating summary..." : "Running action...",
+        ts: Date.now(),
+      });
+
+      executeToolCall(sessionIdRef.current, tool, args)
+        .then((result) => {
+          addEventRef.current?.({
+            id: `${tool}-${Date.now()}-done`,
+            type: "tool_call", tool, status: result.status, display: result.display,
+            ts: Date.now(),
+          });
+          // Send result back so Tavus LLM can continue.
+          // Tavus expects conversation.respond or conversation.append_llm_context to consume tool results.
+          dailyCallRef.current?.sendAppMessage({
+            message_type: "conversation",
+            event_type: "conversation.respond",
+            properties: { text: `[System: The tool ${tool} was executed. Result: ${JSON.stringify(result.result ?? result)}]` },
+          }, "*");
+          if (tool === "end_conversation") {
+            const sid = sessionIdRef.current;
+            finishSession(sid, [...tavusTranscriptRef.current])
+              .then(() => handleSummaryReadyRef.current?.(sid))
+              .catch(() => handleSummaryReadyRef.current?.(sid));
+          }
+        })
+        .catch((err) => {
+          const errMsg = err instanceof Error ? err.message : "Action failed";
+          addEventRef.current?.({
+            id: `${tool}-${Date.now()}-error`,
+            type: "tool_call", tool, status: "error", display: errMsg, ts: Date.now(),
+          });
+          dailyCallRef.current?.sendAppMessage({
+            message_type: "conversation",
+            event_type: "conversation.respond",
+            properties: { text: `[System: The tool ${tool} encountered an error: ${errMsg}]` },
+          }, "*");
+        });
+    }
+  }
+
+  // ── Daily teardown ─────────────────────────────────────────────────────────
+
+  async function teardownDaily() {
+    const daily = dailyCallRef.current;
+    dailyCallRef.current = null;
+    if (!daily) return;
+    try { await daily.leave(); } catch { /* ignore */ }
+    try { daily.destroy(); } catch { /* ignore */ }
+  }
+
+  // ── Call control ───────────────────────────────────────────────────────────
 
   async function startCall() {
     setCallState("connecting");
@@ -129,173 +246,97 @@ export default function CallPage() {
     setCallDuration(0);
     setFrozenDuration(0);
     tavusTranscriptRef.current = [];
-
-    const nextRoom = new Room();
-    roomRef.current = nextRoom;
-    setRoom(nextRoom);
+    greetingReceivedRef.current = false;
     sessionIdRef.current = randomRoomName();
-
-    nextRoom.startAudio().catch(() => {});
-
-    const audioCtx = new AudioContext();
-    await audioCtx.resume();
-    audioCtxRef.current = audioCtx;
-    const analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 256;
-    analyserRef.current = analyser;
-
-    nextRoom.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
-      setIsSpeaking(speakers.some((s) => s instanceof RemoteParticipant));
-    });
-    nextRoom.on(RoomEvent.Disconnected, () => {
-      setCallState("ended");
-      setIsSpeaking(false);
-      teardownAudio();
-      if (sessionIdRef.current) handleSummaryReady(sessionIdRef.current);
-    });
-    nextRoom.on(RoomEvent.TrackSubscribed, (track) => {
-      if (track.kind === Track.Kind.Audio) {
-        const el = track.attach();
-        el.dataset.livekitAudio = "1";
-        document.body.appendChild(el);
-        try {
-          const stream = new MediaStream([track.mediaStreamTrack]);
-          const src = audioCtx.createMediaStreamSource(stream);
-          src.connect(analyser);
-          startAmplitudeLoop();
-        } catch { /* audio analysis unavailable */ }
-      }
-    });
-    nextRoom.on(RoomEvent.TrackUnsubscribed, (track) => {
-      if (track.kind === Track.Kind.Audio) track.detach().forEach((el) => el.remove());
-    });
-
-    async function connectLiveKit() {
-      setCallState("joining");
-      try {
-        const { token, url } = await fetchToken(sessionIdRef.current, `user-${Date.now()}`);
-        await loadSessions();
-        await nextRoom.connect(url, token, { autoSubscribe: true });
-        await nextRoom.localParticipant.setMicrophoneEnabled(true);
-        setCallState("connected");
-      } catch (err) {
-        console.error("LiveKit connection failed", err);
-        teardownAudio();
-        setCallState("idle");
-      }
-    }
 
     try {
       const { conversation_id, conversation_url } = await fetchTavusUrl(sessionIdRef.current);
       tavusConvIdRef.current = conversation_id;
+
+      // Join the Daily room BEFORE setting the iframe URL so our call object
+      // is participant #1. This prevents a second "guest" tile from appearing
+      // when the user's iframe joins later as participant #2.
+      const DailyIframe = (await import("@daily-co/daily-js")).default;
+      const daily = DailyIframe.createCallObject({ startAudioOff: true, startVideoOff: true });
+      daily.on("app-message", (e: { data: unknown }) => handleAppMessage(e.data));
+      await daily.join({ url: conversation_url, subscribeToTracksAutomatically: false });
+      dailyCallRef.current = daily;
+
       setTavusUrl(conversation_url);
-      await connectLiveKit();
+      setCallState("connected");
     } catch (err) {
-      console.warn("Tavus unavailable, connecting directly:", err);
-      await connectLiveKit();
+      console.error("Failed to start call:", err);
+      await teardownDaily();
+      setCallState("idle");
     }
   }
 
   async function endCall() {
-    if (tavusConvIdRef.current) {
-      endTavusConversationForSession(tavusConvIdRef.current, sessionIdRef.current).catch(() => {});
-      tavusConvIdRef.current = "";
-    }
+    const convId = tavusConvIdRef.current;
+    const sid = sessionIdRef.current;
+    const transcript = [...tavusTranscriptRef.current];
+
+    tavusConvIdRef.current = "";
     setTavusUrl(null);
-    setFrozenDuration(callDuration);
-    await roomRef.current?.disconnect();
-    teardownAudio();
+    setFrozenDuration(callDurationRef.current);
     setCallState("ended");
-    if (sessionIdRef.current) {
-      handleSummaryReady(sessionIdRef.current);
+    setIsSpeaking(false);
+    if (speakingTimerRef.current) clearTimeout(speakingTimerRef.current);
+
+    await teardownDaily();
+
+    if (convId) endTavusConversationForSession(convId, sid).catch(() => {});
+
+    if (sid) {
+      if (transcript.length > 0) {
+        // We have real transcript from app-message events — use it directly.
+        // This avoids the race condition where finishSession saves an empty summary
+        // before _sync_tavus_transcript can overwrite it with the real one.
+        finishSession(sid, transcript)
+          .then(() => handleSummaryReady(sid))
+          .catch(() => handleSummaryReady(sid));
+      } else {
+        // No transcript collected — let endTavusConversationForSession handle it
+        // via _sync_tavus_transcript (fetches transcript from Tavus API, ~4-8s).
+        // Wait before polling so the real summary has time to be saved.
+        setTimeout(() => handleSummaryReady(sid), 6000);
+      }
     }
   }
 
+  // ── iframe postMessage — "joined-meeting" only ─────────────────────────────
+  // When the user's iframe joins the Daily room, check if the greeting was
+  // silently consumed by our call object and re-trigger it if so.
+
   useEffect(() => {
     function handleMessage(e: MessageEvent) {
-      if (e.data?.action === "joined-meeting" && pendingLiveKitRef.current) {
-        const connect = pendingLiveKitRef.current;
-        pendingLiveKitRef.current = null;
-        connect();
-      }
-
-      const event = normalizeTavusEvent(e.data);
-      if (!event) return;
-      const props = event.properties;
-
-      if (event.event_type === "conversation.utterance") {
-        const role = props.role === "replica" ? "assistant" : props.role;
-        const speech = props.speech ?? props.text;
-        if ((role === "user" || role === "assistant") && typeof speech === "string" && speech.trim()) {
-          tavusTranscriptRef.current.push({
-            role,
-            content: speech,
-            ts: new Date().toISOString(),
-          });
+      if (e.data?.action !== "joined-meeting") return;
+      // Give Tavus 1.5s to deliver any pending greeting utterance event.
+      // If none arrives, the custom_greeting was consumed by our silent call
+      // object → re-trigger it via conversation.echo.
+      setTimeout(() => {
+        if (!greetingReceivedRef.current && dailyCallRef.current) {
+          dailyCallRef.current.sendAppMessage({
+            message_type: "conversation",
+            event_type: "conversation.echo",
+            properties: { modality: "text", text: GREETING },
+          }, "*");
         }
-        return;
-      }
-
-      if (event.event_type === "conversation.tool_call") {
-        const fn = props.function && typeof props.function === "object"
-          ? props.function as Record<string, unknown>
-          : {};
-        const tool =
-          props.name ??
-          props.tool_name ??
-          fn.name;
-        const rawArgs =
-          props.arguments ??
-          fn.arguments ??
-          {};
-        const args = normalizeArgs(rawArgs);
-        if (typeof tool !== "string" || !sessionIdRef.current) return;
-
-        addEvent({
-          id: `${tool}-${Date.now()}-pending`,
-          type: "tool_call",
-          tool,
-          status: "pending",
-          display: tool === "end_conversation" ? "Generating summary..." : "Running action...",
-          ts: Date.now(),
-        });
-
-        executeToolCall(sessionIdRef.current, tool, args)
-          .then((result) => {
-            addEvent({
-              id: `${tool}-${Date.now()}-done`,
-              type: "tool_call",
-              tool,
-              status: result.status,
-              display: result.display,
-              ts: Date.now(),
-            });
-            if (tool === "end_conversation") handleSummaryReady(sessionIdRef.current);
-          })
-          .catch((err) => {
-            addEvent({
-              id: `${tool}-${Date.now()}-error`,
-              type: "tool_call",
-              tool,
-              status: "error",
-              display: err instanceof Error ? err.message : "Action failed",
-              ts: Date.now(),
-            });
-          });
-      }
+      }, 1500);
     }
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [addEvent, handleSummaryReady]);
+  }, []);
 
+  // ── Cleanup on unmount ─────────────────────────────────────────────────────
   useEffect(() => {
     return () => {
       if (tavusConvIdRef.current) endTavusConversation(tavusConvIdRef.current).catch(() => {});
-      roomRef.current?.disconnect();
       summaryRequestIdRef.current += 1;
-      document.querySelectorAll("audio[data-livekit-audio]").forEach((el) => el.remove());
-      teardownAudio();
+      if (speakingTimerRef.current) clearTimeout(speakingTimerRef.current);
+      void teardownDaily();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function formatDuration(s: number) {
@@ -304,18 +345,12 @@ export default function CallPage() {
     return `${m}:${sec}`;
   }
 
-  const isInCall =
-    callState === "connecting" ||
-    callState === "waiting-join" ||
-    callState === "joining" ||
-    callState === "connected";
-
+  const isInCall = callState === "connecting" || callState === "connected";
   const showPanel = isInCall || callState === "ended";
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 flex flex-col items-center justify-center p-4 gap-5">
 
-      {/* ── Header ── */}
       <div className="flex items-center gap-2.5">
         <div className="w-8 h-8 rounded-xl bg-indigo-500 flex items-center justify-center shadow-lg shadow-indigo-500/30">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="white">
@@ -328,16 +363,12 @@ export default function CallPage() {
         </div>
       </div>
 
-      {/* ── Two-column layout ── */}
       <div className="flex flex-col lg:flex-row gap-5 w-full max-w-5xl items-start justify-center">
 
-        {/* ── LEFT: Call card ── */}
         <div className="w-full max-w-xl mx-auto lg:mx-0 flex-shrink-0 rounded-2xl overflow-hidden shadow-2xl shadow-black/50 border border-white/5">
 
-          {/* Video viewport */}
           <div className="relative bg-slate-900" style={{ height: 480 }}>
 
-            {/* IDLE / ENDED */}
             {(callState === "idle" || callState === "ended") && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-gradient-to-b from-slate-800 to-slate-900">
                 <div className="relative">
@@ -357,7 +388,6 @@ export default function CallPage() {
               </div>
             )}
 
-            {/* CONNECTING */}
             {callState === "connecting" && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 bg-slate-900 z-10">
                 <div className="relative flex items-center justify-center">
@@ -372,18 +402,6 @@ export default function CallPage() {
               </div>
             )}
 
-            {/* JOINING */}
-            {callState === "joining" && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 bg-slate-900/80 z-10">
-                <div className="w-10 h-10 rounded-full border-t-transparent border-emerald-400 animate-spin" style={{ borderWidth: 3, borderStyle: "solid" }} />
-                <div className="text-center">
-                  <p className="text-white font-medium">Starting conversation…</p>
-                  <p className="text-slate-500 text-sm mt-1">Connecting to Maya</p>
-                </div>
-              </div>
-            )}
-
-            {/* TAVUS IFRAME */}
             {tavusUrl && (
               <iframe
                 src={tavusUrl}
@@ -393,7 +411,6 @@ export default function CallPage() {
               />
             )}
 
-            {/* Speaking badge */}
             {callState === "connected" && (
               <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between pointer-events-none">
                 <div className={`flex items-center gap-2 bg-black/60 backdrop-blur-sm rounded-full px-3 py-1.5 transition-opacity duration-300 ${isSpeaking ? "opacity-100" : "opacity-0"}`}>
@@ -411,40 +428,30 @@ export default function CallPage() {
             )}
           </div>
 
-          {/* Controls bar */}
           <div className="bg-slate-800/90 backdrop-blur-sm border-t border-white/5 px-6 py-4 flex items-center justify-between gap-4">
             <div className="flex items-center gap-2 min-w-0">
               <span className={`w-2 h-2 rounded-full flex-shrink-0 transition-colors duration-300 ${
-                callState === "connected"
-                  ? "bg-emerald-400 shadow-sm shadow-emerald-400/80"
-                  : (callState === "connecting" || callState === "waiting-join" || callState === "joining")
-                  ? "bg-amber-400 animate-pulse"
+                callState === "connected" ? "bg-emerald-400 shadow-sm shadow-emerald-400/80"
+                  : callState === "connecting" ? "bg-amber-400 animate-pulse"
                   : "bg-slate-600"
               }`} />
               <span className="text-slate-300 text-sm truncate">
-                {callState === "idle"         && "Ready to connect"}
-                {callState === "connecting"   && "Preparing avatar…"}
-                {callState === "waiting-join" && "Click Join to start"}
-                {callState === "joining"      && "Connecting…"}
-                {callState === "connected"    && (isSpeaking ? "Maya is speaking" : "Listening…")}
-                {callState === "ended"        && "Call ended"}
+                {callState === "idle"       && "Ready to connect"}
+                {callState === "connecting" && "Preparing avatar…"}
+                {callState === "connected"  && (isSpeaking ? "Maya is speaking" : "Listening…")}
+                {callState === "ended"      && "Call ended"}
               </span>
             </div>
 
             {!isInCall ? (
-              <button
-                onClick={startCall}
-                className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-semibold px-5 py-2.5 rounded-full transition-all duration-150 shadow-lg shadow-indigo-600/30 flex-shrink-0"
-              >
+              <button onClick={startCall}
+                className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-semibold px-5 py-2.5 rounded-full transition-all duration-150 shadow-lg shadow-indigo-600/30 flex-shrink-0">
                 <PhoneIcon />
                 {callState === "ended" ? "New Call" : "Start Call"}
               </button>
             ) : (
-              <button
-                onClick={endCall}
-                disabled={callState === "connecting"}
-                className="flex items-center gap-2 bg-red-600 hover:bg-red-500 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold px-5 py-2.5 rounded-full transition-all duration-150 shadow-lg shadow-red-600/30 flex-shrink-0"
-              >
+              <button onClick={endCall} disabled={callState === "connecting"}
+                className="flex items-center gap-2 bg-red-600 hover:bg-red-500 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold px-5 py-2.5 rounded-full transition-all duration-150 shadow-lg shadow-red-600/30 flex-shrink-0">
                 <PhoneOffIcon />
                 End Call
               </button>
@@ -452,14 +459,10 @@ export default function CallPage() {
           </div>
         </div>
 
-        {/* ── RIGHT: Side panel ── */}
         {showPanel && (
           <div className="w-full lg:w-80 flex-shrink-0 space-y-3 animate-slide-up-fade">
-
-            {/* Live tool feed — always visible while in call or after */}
             <ToolStatus events={events} isInCall={isInCall} />
 
-            {/* Post-call: generating spinner */}
             {callState === "ended" && summaryGenerating && !summary && (
               <div className="rounded-xl border border-indigo-800/40 bg-indigo-950/30 px-4 py-3.5 flex items-center gap-3 animate-slide-up-fade">
                 <div className="w-4 h-4 rounded-full border-2 border-t-transparent border-indigo-400 animate-spin flex-shrink-0" />
@@ -470,52 +473,23 @@ export default function CallPage() {
               </div>
             )}
 
-            {/* Post-call: inline call details (Vapi-style) */}
             {callState === "ended" && summary && (
               <CallDetails data={summary} duration={frozenDuration} />
             )}
-
           </div>
         )}
       </div>
 
-      <CallSessionsTable
-        sessions={sessions}
-        loading={sessionsLoading}
-        onRefresh={loadSessions}
-      />
-
+      <CallSessionsTable sessions={sessions} loading={sessionsLoading} onRefresh={loadSessions} />
     </main>
   );
 }
 
-type TavusEvent = {
-  event_type?: string;
-  eventType?: string;
-  properties?: Record<string, unknown>;
-  data?: {
-    event_type?: string;
-    eventType?: string;
-    properties?: Record<string, unknown>;
-  };
-};
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
-function normalizeTavusEvent(input: unknown): { event_type: string; properties: Record<string, unknown> } | null {
-  if (!input || typeof input !== "object") return null;
-  const msg = input as TavusEvent;
-  const source = msg.data?.event_type || msg.data?.eventType ? msg.data : msg;
-  const eventType = source.event_type ?? source.eventType;
-  if (!eventType?.startsWith("conversation.")) return null;
-  return { event_type: eventType, properties: source.properties ?? {} };
-}
-
-function safeJsonParse(value: string): Record<string, unknown> {
-  try {
-    const parsed = JSON.parse(value);
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
+function safeJsonParse(v: string): Record<string, unknown> {
+  try { const p = JSON.parse(v); return p && typeof p === "object" ? p : {}; }
+  catch { return {}; }
 }
 
 function normalizeArgs(value: unknown): Record<string, unknown> {
