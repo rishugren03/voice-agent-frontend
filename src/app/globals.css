@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f0f4f8;
+  --foreground: #0f172a;
 }
 
 @theme inline {
@@ -12,15 +12,36 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+@keyframes ping-slow {
+  0% { transform: scale(1); opacity: 0.6; }
+  100% { transform: scale(1.7); opacity: 0; }
+}
+
+@keyframes ping-slower {
+  0% { transform: scale(1); opacity: 0.4; }
+  100% { transform: scale(2.1); opacity: 0; }
+}
+
+.animate-ping-slow {
+  animation: ping-slow 1.4s ease-out infinite;
+}
+
+.animate-ping-slower {
+  animation: ping-slower 1.4s ease-out infinite 0.35s;
+}
+
+@keyframes wave-bar {
+  0%, 100% { transform: scaleY(0.4); }
+  50% { transform: scaleY(1); }
+}
+
+.wave-bar {
+  animation: wave-bar 0.8s ease-in-out infinite;
+  transform-origin: bottom;
 }
