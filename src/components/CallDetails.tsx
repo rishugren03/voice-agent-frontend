@@ -1,15 +1,14 @@
 "use client";
 
 import type { SessionSummaryResponse, CallSummary } from "@/types";
-import { 
-  User, 
-  Calendar, 
-  Target, 
-  Heart, 
-  FileText, 
-  PieChart,
-  Zap,
-  CheckCircle2
+import {
+  User,
+  Calendar,
+  FileText,
+  Heart,
+  CheckCircle2,
+  Activity,
+  Phone,
 } from "lucide-react";
 
 interface Props {
@@ -19,116 +18,105 @@ interface Props {
 
 export function CallDetails({ summary, cost_breakdown }: Props) {
   return (
-    <div className="w-full space-y-8 animate-slide-up-fade">
-      {/* Patient Profile Card */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="p-5 rounded-2xl bg-white/[0.02] border border-white/[0.05] shadow-sm flex items-start gap-4">
-          <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20">
-             <User className="w-5 h-5 text-indigo-400" />
+    <div className="w-full space-y-4 animate-slide-up-fade">
+      {/* Patient details */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="p-3.5 rounded-xl bg-white border border-slate-200 shadow-sm flex items-start gap-3">
+          <div className="w-7 h-7 rounded-lg bg-teal-50 flex items-center justify-center flex-shrink-0">
+            <User className="w-3.5 h-3.5 text-teal-600" />
           </div>
-          <div className="flex-1 min-w-0">
-             <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Lead Details</p>
-             <p className="font-bold text-white text-base truncate">{summary.extracted.name || "Unknown Patient"}</p>
-             <p className="text-xs text-muted-foreground mt-1 font-mono tracking-tight">{summary.extracted.phone || "No phone capture"}</p>
+          <div className="min-w-0">
+            <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Patient</p>
+            <p className="text-sm font-medium text-slate-900 truncate">{summary.extracted.name || "Unknown"}</p>
+            <p className="text-xs text-slate-400 mt-0.5 font-mono">{summary.extracted.phone || "—"}</p>
           </div>
         </div>
 
-        <div className="p-5 rounded-2xl bg-white/[0.02] border border-white/[0.05] shadow-sm flex items-start gap-4">
-          <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20">
-             <Target className="w-5 h-5 text-emerald-400" />
+        <div className="p-3.5 rounded-xl bg-white border border-slate-200 shadow-sm flex items-start gap-3">
+          <div className="w-7 h-7 rounded-lg bg-sky-50 flex items-center justify-center flex-shrink-0">
+            <Activity className="w-3.5 h-3.5 text-sky-600" />
           </div>
-          <div className="flex-1 min-w-0">
-             <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Inquiry Intent</p>
-             <p className="font-bold text-white text-sm leading-tight line-clamp-2">{summary.extracted.intent || "General inquiry"}</p>
+          <div className="min-w-0">
+            <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Intent</p>
+            <p className="text-xs font-medium text-slate-800 leading-tight line-clamp-3">{summary.extracted.intent || "General inquiry"}</p>
           </div>
         </div>
       </div>
 
-      {/* Overview Section */}
-      <div className="p-6 rounded-3xl bg-indigo-500/[0.03] border border-indigo-500/10 relative overflow-hidden group">
-        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-           <FileText className="w-12 h-12 text-indigo-400" />
+      {/* Overview */}
+      <div className="p-4 rounded-xl bg-teal-50 border border-teal-100">
+        <div className="flex items-center gap-1.5 mb-2">
+          <FileText className="w-3.5 h-3.5 text-teal-600" />
+          <h4 className="text-[10px] font-medium uppercase tracking-wider text-teal-700">Session Overview</h4>
         </div>
-        <div className="flex items-center gap-2 mb-4">
-           <Zap className="w-4 h-4 text-indigo-400" />
-            <h4 className="text-[10px] font-bold uppercase tracking-wider text-indigo-300">Session Overview</h4>
-        </div>
-        <p className="text-sm text-slate-300 leading-relaxed font-medium">
-          {summary.overview}
-        </p>
+        <p className="text-sm text-slate-700 leading-relaxed">{summary.overview}</p>
       </div>
 
-      {/* Appointments List */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between px-1">
-            <div className="flex items-center gap-2">
-               <Calendar className="w-4 h-4 text-indigo-400" />
-               <h4 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Captured Outcomes</h4>
-            </div>
-           <span className="text-[10px] font-bold text-emerald-400">{summary.appointments.length} Captured</span>
+      {/* Appointments */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between px-0.5">
+          <div className="flex items-center gap-1.5">
+            <Calendar className="w-3.5 h-3.5 text-slate-400" />
+            <h4 className="text-[10px] font-medium uppercase tracking-wider text-slate-500">Appointments</h4>
+          </div>
+          <span className="text-[10px] text-emerald-600 font-medium">{summary.appointments.length} booked</span>
         </div>
-        
+
         {summary.appointments.length > 0 ? (
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             {summary.appointments.map((apt, i) => (
-              <div key={i} className="group flex items-center gap-4 p-4 rounded-2xl bg-white/[0.02] border border-white/[0.05] hover:bg-white/[0.04] transition-all">
-                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20 group-hover:scale-110 transition-transform">
-                   <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-white border border-slate-200">
+                <div className="w-6 h-6 rounded-md bg-emerald-50 flex items-center justify-center flex-shrink-0">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-white">{apt.action}</p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">
-                    {apt.doctor} • {apt.date} at {apt.time}
-                  </p>
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-slate-800">{apt.action}</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">{apt.doctor} · {apt.date} at {apt.time}</p>
                 </div>
               </div>
             ))}
           </div>
         ) : (
-          <div className="py-8 px-6 rounded-2xl border border-dashed border-white/5 text-center">
-            <p className="text-xs text-muted-foreground">No specific appointments synchronized during this session.</p>
+          <div className="py-5 text-center border border-dashed border-slate-200 rounded-lg bg-slate-50">
+            <Phone className="w-4 h-4 text-slate-300 mx-auto mb-1.5" />
+            <p className="text-xs text-slate-400">No appointments booked</p>
           </div>
         )}
       </div>
 
-      {/* Preferences Section */}
+      {/* Preferences */}
       {summary.preferences && (
-        <div className="p-5 rounded-2xl bg-white/[0.01] border border-white/[0.03] space-y-3">
-          <div className="flex items-center gap-2">
-             <Heart className="w-3.5 h-3.5 text-rose-400" />
-             <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Patient Preferences</h4>
+        <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+          <div className="flex items-center gap-1.5 mb-2">
+            <Heart className="w-3.5 h-3.5 text-rose-400" />
+            <h4 className="text-[10px] font-medium uppercase tracking-wider text-slate-500">Patient Preferences</h4>
           </div>
-          <p className="text-xs text-slate-400 italic font-medium">&quot;{summary.preferences}&quot;</p>
+          <p className="text-xs text-slate-600 italic">&quot;{summary.preferences}&quot;</p>
         </div>
       )}
 
-      {/* Cost Analytics */}
+      {/* Cost breakdown */}
       {cost_breakdown && (
-        <div className="space-y-4 pt-4">
-            <div className="flex items-center gap-2 px-1">
-               <PieChart className="w-4 h-4 text-indigo-400" />
-               <h4 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Session Performance</h4>
+        <div>
+          <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wider mb-2 px-0.5">Session Cost</p>
+          <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-sm grid grid-cols-2 gap-3">
+            <div>
+              <p className="text-[10px] text-slate-400">STT</p>
+              <p className="font-mono text-xs font-medium text-slate-800 mt-0.5">${cost_breakdown.stt_usd.toFixed(4)}</p>
             </div>
-           
-           <div className="p-6 rounded-3xl bg-slate-900/50 border border-white/[0.05] grid grid-cols-2 lg:grid-cols-4 gap-6 relative overflow-hidden">
-             <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-transparent pointer-events-none" />
-             <div>
-               <p className="text-[9px] font-bold text-muted-foreground lowercase tracking-tighter opacity-60">stt_compute</p>
-               <p className="mt-1 font-mono text-xs font-bold text-white">${cost_breakdown.stt_usd.toFixed(4)}</p>
-             </div>
-             <div>
-               <p className="text-[9px] font-bold text-muted-foreground lowercase tracking-tighter opacity-60">tts_synthesis</p>
-               <p className="mt-1 font-mono text-xs font-bold text-white">${cost_breakdown.tts_usd.toFixed(4)}</p>
-             </div>
-             <div>
-               <p className="text-[9px] font-bold text-muted-foreground lowercase tracking-tighter opacity-60">llm_intelligence</p>
-               <p className="mt-1 font-mono text-xs font-bold text-white">${cost_breakdown.llm_usd.toFixed(4)}</p>
-             </div>
-             <div className="bg-indigo-500/10 rounded-xl p-2 border border-indigo-500/20">
-               <p className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest">Total cost</p>
-               <p className="mt-0.5 font-mono text-sm font-black text-indigo-400">${cost_breakdown.total_usd.toFixed(4)}</p>
-             </div>
-           </div>
+            <div>
+              <p className="text-[10px] text-slate-400">TTS</p>
+              <p className="font-mono text-xs font-medium text-slate-800 mt-0.5">${cost_breakdown.tts_usd.toFixed(4)}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-slate-400">LLM</p>
+              <p className="font-mono text-xs font-medium text-slate-800 mt-0.5">${cost_breakdown.llm_usd.toFixed(4)}</p>
+            </div>
+            <div className="bg-teal-50 rounded-lg p-2 border border-teal-100">
+              <p className="text-[10px] text-teal-600">Total</p>
+              <p className="font-mono text-sm font-semibold text-teal-700 mt-0.5">${cost_breakdown.total_usd.toFixed(4)}</p>
+            </div>
+          </div>
         </div>
       )}
     </div>

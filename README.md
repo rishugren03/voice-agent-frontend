@@ -1,36 +1,83 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Mykare AI — Frontend
 
-## Getting Started
+Next.js 16 dashboard for the Mykare voice appointment assistant. Provides a live call console powered by Tavus CVI and a call history view with per-session summaries and cost breakdowns.
 
-First, run the development server:
+---
+
+## Requirements
+
+- Node.js 20+
+- The backend API running at a reachable URL (default: `http://localhost:8000`)
+
+---
+
+## Setup
 
 ```bash
+cp .env.local.example .env.local
+# Set NEXT_PUBLIC_API_URL to your backend URL
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Environment Variables
 
-## Learn More
+| Variable | Default | Description |
+|---|---|---|
+| `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | Backend base URL |
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## File Structure
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+src/
+  app/
+    page.tsx                 Dashboard overview — live stats and recent sessions
+    layout.tsx               Root layout wrapping the shell
+    call/
+      page.tsx               Live call page — Tavus iframe, tool activity feed, summary
+    call-sessions/
+      page.tsx               Server component — initial data fetch for call history
+      HistoryTable.tsx        Client table with per-session detail slide-over
+  components/
+    CallDetails.tsx          Renders summary: overview, appointments, cost breakdown
+    DashboardLayout.tsx      App shell with sidebar and top header
+    Sidebar.tsx              Navigation sidebar
+    ToolStatus.tsx           Live feed of tool calls during an active session
+    ui/
+      sheet.tsx              Radix Dialog-based slide-over panel
+  hooks/
+    useToolFeed.ts           Reducer that manages tool event state during a call
+  lib/
+    api.ts                   All fetch calls to the backend API
+    utils.ts                 cn() helper for merging Tailwind classes
+  types/
+    index.ts                 Shared TypeScript interfaces
+```
 
-## Deploy on Vercel
+---
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## How the Call Page Works
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. Clicking "Open Console" calls `POST /api/tavus/conversation` to create a Tavus CVI session and get an embeddable URL.
+2. The Tavus iframe is rendered; Daily.co is used as the underlying WebRTC transport.
+3. Tool calls from the Tavus LLM arrive as `conversation.tool_call` postMessage events.
+4. Each tool call is forwarded to `POST /api/session/{id}/tool-call` on the backend, which runs the action and returns the result.
+5. The result is sent back to Tavus via `conversation.respond` so the agent can continue speaking.
+6. When the call ends, `POST /api/session/{id}/finish` triggers summary generation, then the summary is polled and displayed.
+
+---
+
+## Scripts
+
+| Command | Description |
+|---|---|
+| `npm run dev` | Start development server with Turbopack |
+| `npm run build` | Production build |
+| `npm run start` | Start production server |
+| `npm run lint` | Run ESLint |

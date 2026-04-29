@@ -4,20 +4,17 @@ export default async function CallSessionsPage() {
   const sessions = await fetchCallSessions();
 
   return (
-    <div className="space-y-8 animate-slide-up-fade">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold tracking-tight">Call History</h1>
-        <p className="text-muted-foreground">View and analyze your past AI agent conversations.</p>
+    <div className="space-y-5 animate-slide-up-fade">
+      <div>
+        <h1 className="text-xl font-semibold text-slate-900">Call History</h1>
+        <p className="text-sm text-slate-500 mt-0.5">Browse and review past consultation sessions.</p>
       </div>
 
-      <div className="bg-card border border-border rounded-2xl overflow-hidden">
-        <HistoryTableInitial sessions={sessions} />
-      </div>
+      <HistoryTableInitial sessions={sessions} />
     </div>
   );
 }
 
-// Client wrapper for the table
 import type { CallSessionRow } from "@/types";
 import { HistoryTable } from "@/app/call-sessions/HistoryTable";
 

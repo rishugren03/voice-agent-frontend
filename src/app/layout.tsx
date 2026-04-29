@@ -3,8 +3,8 @@ import "./globals.css";
 import { DashboardLayout } from "@/components/DashboardLayout";
 
 export const metadata: Metadata = {
-  title: "SalesMaya | Mykare AI",
-  description: "Advanced AI healthcare assistant for sales teams",
+  title: "Maya | Mykare Health",
+  description: "AI-powered healthcare voice assistant",
 };
 
 export default function RootLayout({
