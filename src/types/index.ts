@@ -29,12 +29,30 @@ export interface CallSummary {
 export interface SessionSummaryResponse {
   session_id: string;
   summary: CallSummary;
+  transcript?: TranscriptItem[] | null;
   cost_breakdown: {
     stt_usd: number;
     tts_usd: number;
     llm_usd: number;
     total_usd: number;
   } | null;
+  started_at: string;
+  ended_at: string | null;
+}
+
+export interface TranscriptItem {
+  role: "user" | "assistant";
+  content: string;
+  ts: string;
+}
+
+export interface CallSessionRow {
+  id: number;
+  session_id: string;
+  user_id: number | null;
+  transcript: TranscriptItem[] | null;
+  summary: CallSummary | null;
+  cost_breakdown: SessionSummaryResponse["cost_breakdown"];
   started_at: string;
   ended_at: string | null;
 }

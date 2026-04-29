@@ -70,5 +70,9 @@ export function useToolFeed(
     };
   }, [room, onSummaryReady]);
 
-  return { events, clearEvents: () => dispatch({ type: "CLEAR" }) };
+  return {
+    events,
+    addEvent: (event: ToolEvent) => dispatch({ type: "UPSERT", event }),
+    clearEvents: () => dispatch({ type: "CLEAR" }),
+  };
 }
