@@ -1,149 +1,136 @@
 "use client";
 
-import type { SessionSummaryResponse } from "@/types";
+import type { SessionSummaryResponse, CallSummary } from "@/types";
+import { 
+  User, 
+  Calendar, 
+  Target, 
+  Heart, 
+  FileText, 
+  PieChart,
+  Zap,
+  CheckCircle2
+} from "lucide-react";
 
 interface Props {
-  data: SessionSummaryResponse;
-  duration: number;
+  summary: CallSummary;
+  cost_breakdown?: SessionSummaryResponse["cost_breakdown"];
 }
 
-export function CallDetails({ data, duration }: Props) {
-  const { summary, cost_breakdown } = data;
-
+export function CallDetails({ summary, cost_breakdown }: Props) {
   return (
-    <div className="w-full space-y-3 animate-slide-up-fade">
-
-      {/* ── Header ── */}
-      <div className="flex items-center justify-between px-1">
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-slate-500 flex-shrink-0" />
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
-            Call Summary
-          </p>
-        </div>
-        <span className="text-[10px] text-slate-500 font-mono tabular-nums">
-          {formatDuration(duration)}
-        </span>
-      </div>
-
-      {/* ── Overview ── */}
-      <div className="rounded-xl border border-white/8 bg-white/[0.03] p-4">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-2">Overview</p>
-        <p className="text-sm text-slate-300 leading-relaxed">{summary.overview}</p>
-      </div>
-
-      {/* ── Extracted Info ── */}
-      <div className="rounded-xl border border-white/8 bg-white/[0.03] overflow-hidden">
-        <div className="px-4 pt-3 pb-1">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">Patient</p>
-        </div>
-        <div className="divide-y divide-white/5">
-          <InfoRow label="Name"   value={summary.extracted.name  ?? "—"} />
-          <InfoRow label="Phone"  value={summary.extracted.phone ?? "—"} />
-          <InfoRow label="Intent" value={summary.extracted.intent ?? "—"} />
-          {summary.preferences && (
-            <InfoRow label="Notes" value={summary.preferences} />
-          )}
-        </div>
-      </div>
-
-      {/* ── Appointments ── */}
-      {summary.appointments.length > 0 && (
-        <div className="rounded-xl border border-white/8 bg-white/[0.03] overflow-hidden">
-          <div className="px-4 pt-3 pb-2">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
-              Appointments ({summary.appointments.length})
-            </p>
+    <div className="w-full space-y-8 animate-slide-up-fade">
+      {/* Patient Profile Card */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="p-5 rounded-2xl bg-white/[0.02] border border-white/[0.05] shadow-sm flex items-start gap-4">
+          <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20">
+             <User className="w-5 h-5 text-indigo-400" />
           </div>
-          <div className="px-3 pb-3 space-y-2">
-            {summary.appointments.map((a, i) => (
-              <div
-                key={i}
-                className="flex items-center justify-between bg-white/[0.04] rounded-lg px-3 py-2.5 gap-3"
-              >
-                <div className="min-w-0">
-                  <p className="text-xs font-medium text-slate-200 truncate">
-                    {a.date} · {a.time}
-                  </p>
-                  {a.doctor && (
-                    <p className="text-[11px] text-slate-500 mt-0.5 truncate">{a.doctor}</p>
-                  )}
+          <div className="flex-1 min-w-0">
+             <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Lead Details</p>
+             <p className="font-bold text-white text-base truncate">{summary.extracted.name || "Unknown Patient"}</p>
+             <p className="text-xs text-muted-foreground mt-1 font-mono tracking-tight">{summary.extracted.phone || "No phone capture"}</p>
+          </div>
+        </div>
+
+        <div className="p-5 rounded-2xl bg-white/[0.02] border border-white/[0.05] shadow-sm flex items-start gap-4">
+          <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20">
+             <Target className="w-5 h-5 text-emerald-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+             <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Inquiry Intent</p>
+             <p className="font-bold text-white text-sm leading-tight line-clamp-2">{summary.extracted.intent || "General inquiry"}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Overview Section */}
+      <div className="p-6 rounded-3xl bg-indigo-500/[0.03] border border-indigo-500/10 relative overflow-hidden group">
+        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+           <FileText className="w-12 h-12 text-indigo-400" />
+        </div>
+        <div className="flex items-center gap-2 mb-4">
+           <Zap className="w-4 h-4 text-indigo-400" />
+            <h4 className="text-[10px] font-bold uppercase tracking-wider text-indigo-300">Session Overview</h4>
+        </div>
+        <p className="text-sm text-slate-300 leading-relaxed font-medium">
+          {summary.overview}
+        </p>
+      </div>
+
+      {/* Appointments List */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between px-1">
+            <div className="flex items-center gap-2">
+               <Calendar className="w-4 h-4 text-indigo-400" />
+               <h4 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Captured Outcomes</h4>
+            </div>
+           <span className="text-[10px] font-bold text-emerald-400">{summary.appointments.length} Captured</span>
+        </div>
+        
+        {summary.appointments.length > 0 ? (
+          <div className="space-y-2">
+            {summary.appointments.map((apt, i) => (
+              <div key={i} className="group flex items-center gap-4 p-4 rounded-2xl bg-white/[0.02] border border-white/[0.05] hover:bg-white/[0.04] transition-all">
+                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20 group-hover:scale-110 transition-transform">
+                   <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                 </div>
-                <ActionChip action={a.action} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-white">{apt.action}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    {apt.doctor} • {apt.date} at {apt.time}
+                  </p>
+                </div>
               </div>
             ))}
           </div>
-        </div>
-      )}
-
-      {/* ── Cost Breakdown ── */}
-      <div className="rounded-xl border border-white/8 bg-white/[0.03] overflow-hidden">
-        <div className="px-4 pt-3 pb-1">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">Session Cost</p>
-        </div>
-        {cost_breakdown ? (
-          <div className="divide-y divide-white/5">
-            <CostRow label="STT · Deepgram" value={cost_breakdown.stt_usd} />
-            <CostRow label="TTS · Cartesia" value={cost_breakdown.tts_usd} />
-            <CostRow label="LLM · GPT-4o"   value={cost_breakdown.llm_usd} />
-            <div className="flex justify-between items-center px-4 py-2.5 bg-white/[0.04]">
-              <span className="text-xs font-semibold text-white">Total</span>
-              <span className="text-xs font-semibold text-emerald-400 font-mono">
-                ${cost_breakdown.total_usd.toFixed(5)}
-              </span>
-            </div>
-          </div>
         ) : (
-          <p className="px-4 pb-3 text-xs text-slate-500">Cost data unavailable</p>
+          <div className="py-8 px-6 rounded-2xl border border-dashed border-white/5 text-center">
+            <p className="text-xs text-muted-foreground">No specific appointments synchronized during this session.</p>
+          </div>
         )}
       </div>
 
-      {/* ── Timestamp ── */}
-      <p className="text-[10px] text-slate-600 text-right px-1">
-        {new Date(summary.timestamp).toLocaleString()}
-      </p>
+      {/* Preferences Section */}
+      {summary.preferences && (
+        <div className="p-5 rounded-2xl bg-white/[0.01] border border-white/[0.03] space-y-3">
+          <div className="flex items-center gap-2">
+             <Heart className="w-3.5 h-3.5 text-rose-400" />
+             <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Patient Preferences</h4>
+          </div>
+          <p className="text-xs text-slate-400 italic font-medium">&quot;{summary.preferences}&quot;</p>
+        </div>
+      )}
 
+      {/* Cost Analytics */}
+      {cost_breakdown && (
+        <div className="space-y-4 pt-4">
+            <div className="flex items-center gap-2 px-1">
+               <PieChart className="w-4 h-4 text-indigo-400" />
+               <h4 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Session Performance</h4>
+            </div>
+           
+           <div className="p-6 rounded-3xl bg-slate-900/50 border border-white/[0.05] grid grid-cols-2 lg:grid-cols-4 gap-6 relative overflow-hidden">
+             <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-transparent pointer-events-none" />
+             <div>
+               <p className="text-[9px] font-bold text-muted-foreground lowercase tracking-tighter opacity-60">stt_compute</p>
+               <p className="mt-1 font-mono text-xs font-bold text-white">${cost_breakdown.stt_usd.toFixed(4)}</p>
+             </div>
+             <div>
+               <p className="text-[9px] font-bold text-muted-foreground lowercase tracking-tighter opacity-60">tts_synthesis</p>
+               <p className="mt-1 font-mono text-xs font-bold text-white">${cost_breakdown.tts_usd.toFixed(4)}</p>
+             </div>
+             <div>
+               <p className="text-[9px] font-bold text-muted-foreground lowercase tracking-tighter opacity-60">llm_intelligence</p>
+               <p className="mt-1 font-mono text-xs font-bold text-white">${cost_breakdown.llm_usd.toFixed(4)}</p>
+             </div>
+             <div className="bg-indigo-500/10 rounded-xl p-2 border border-indigo-500/20">
+               <p className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest">Total cost</p>
+               <p className="mt-0.5 font-mono text-sm font-black text-indigo-400">${cost_breakdown.total_usd.toFixed(4)}</p>
+             </div>
+           </div>
+        </div>
+      )}
     </div>
   );
-}
-
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-start px-4 py-2 gap-3">
-      <span className="text-[11px] text-slate-500 w-14 flex-shrink-0 pt-px">{label}</span>
-      <span className="text-xs text-slate-300 flex-1 leading-relaxed">{value}</span>
-    </div>
-  );
-}
-
-function CostRow({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="flex justify-between items-center px-4 py-2">
-      <span className="text-[11px] text-slate-500">{label}</span>
-      <span className="text-[11px] text-slate-400 font-mono">${value.toFixed(5)}</span>
-    </div>
-  );
-}
-
-function ActionChip({ action }: { action: string }) {
-  const map: Record<string, string> = {
-    booked:    "bg-emerald-950/70 border-emerald-800/50 text-emerald-300",
-    cancelled: "bg-red-950/70 border-red-800/50 text-red-300",
-    modified:  "bg-amber-950/70 border-amber-800/50 text-amber-300",
-  };
-  const label: Record<string, string> = {
-    booked: "✅ Booked", cancelled: "🚫 Cancelled", modified: "✏️ Modified",
-  };
-  const cls = map[action] ?? "bg-white/5 border-white/10 text-slate-400";
-  return (
-    <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full border flex-shrink-0 ${cls}`}>
-      {label[action] ?? action}
-    </span>
-  );
-}
-
-function formatDuration(s: number) {
-  const m = Math.floor(s / 60).toString().padStart(2, "0");
-  const sec = (s % 60).toString().padStart(2, "0");
-  return `${m}:${sec}`;
 }

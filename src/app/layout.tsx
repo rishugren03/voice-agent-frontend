@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { DashboardLayout } from "@/components/DashboardLayout";
 
 export const metadata: Metadata = {
-  title: "Mykare AI — Healthcare Assistant",
-  description: "Voice-powered healthcare front-desk assistant",
+  title: "SalesMaya | Mykare AI",
+  description: "Advanced AI healthcare assistant for sales teams",
 };
 
 export default function RootLayout({
@@ -12,8 +13,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full antialiased">
-      <body className="min-h-full flex flex-col bg-[#f0f4f8]">{children}</body>
+    <html lang="en">
+      <body className="antialiased">
+        <DashboardLayout>{children}</DashboardLayout>
+      </body>
     </html>
   );
 }
