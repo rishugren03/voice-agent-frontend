@@ -1,7 +1,7 @@
 import { fetchCallSessions } from "@/lib/api";
 
 export default async function CallSessionsPage() {
-  const sessions = await fetchCallSessions();
+  const sessions = await fetchCallSessions().catch(() => []);
 
   return (
     <div className="space-y-5 animate-slide-up-fade">

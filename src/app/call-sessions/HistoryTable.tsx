@@ -72,8 +72,74 @@ export function HistoryTable({ initialSessions }: { initialSessions: CallSession
         </button>
       </div>
 
-      {/* Table */}
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+      {/* Mobile card list – visible below md */}
+      <div className="md:hidden space-y-2">
+        {sessions.length === 0 ? (
+          <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-sm text-slate-400 shadow-sm">
+            No sessions found.
+          </div>
+        ) : sessions.map((session) => {
+          const cost = session.cost_breakdown?.total_usd !== undefined
+            ? session.cost_breakdown.total_usd.toFixed(4)
+            : ((session.cost_breakdown?.stt_usd || 0) + (session.cost_breakdown?.tts_usd || 0) + (session.cost_breakdown?.llm_usd || 0)).toFixed(4);
+          const duration = session.ended_at
+            ? `${Math.round((new Date(session.ended_at).getTime() - new Date(session.started_at).getTime()) / 1000)}s`
+            : "—";
+
+          return (
+            <div
+              key={session.id}
+              onClick={() => setSelectedSession(session)}
+              className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm cursor-pointer hover:border-teal-300 transition-colors"
+            >
+              <div className="flex items-start justify-between gap-3 mb-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-slate-900 truncate">
+                    {session.user_name || session.user_phone || "Unknown caller"}
+                  </p>
+                  <p className="text-[10px] font-mono text-slate-400 mt-0.5">{session.session_id.slice(0, 14)}...</p>
+                </div>
+                <span className={cn(
+                  "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium border flex-shrink-0",
+                  session.ended_at
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                    : "bg-amber-50 text-amber-700 border-amber-200"
+                )}>
+                  <span className={cn(
+                    "w-1.5 h-1.5 rounded-full",
+                    session.ended_at ? "bg-emerald-500" : "bg-amber-500 animate-pulse"
+                  )} />
+                  {session.ended_at ? "Complete" : "Live"}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-4 text-xs text-slate-500 mb-2">
+                <div className="flex items-center gap-1">
+                  <Calendar className="w-3 h-3" />
+                  {formatDate(session.started_at)}
+                </div>
+                <div className="flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  {duration}
+                </div>
+                <div className="flex items-center gap-1 text-emerald-600">
+                  <DollarSign className="w-3 h-3" />
+                  {cost}
+                </div>
+              </div>
+
+              {session.summary?.overview && (
+                <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
+                  {session.summary.overview}
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Desktop table – hidden below md */}
+      <div className="hidden md:block bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto custom-scrollbar">
           <table className="w-full text-left border-collapse">
             <thead>
@@ -162,7 +228,7 @@ export function HistoryTable({ initialSessions }: { initialSessions: CallSession
 
       {/* Detail sheet */}
       <Sheet open={!!selectedSession} onOpenChange={(open) => !open && setSelectedSession(null)}>
-        <SheetContent side="right" className="w-full sm:max-w-lg bg-white border-l border-slate-200 p-0 overflow-hidden flex flex-col shadow-xl">
+        <SheetContent side="right" className="w-full sm:max-w-lg md:max-w-xl bg-white border-l border-slate-200 p-0 overflow-hidden flex flex-col shadow-xl">
           <div className="px-6 py-5 border-b border-slate-100 bg-slate-50">
             <div className="flex items-start justify-between gap-4">
               <div>

@@ -20,7 +20,7 @@ export function CallDetails({ summary, cost_breakdown }: Props) {
   return (
     <div className="w-full space-y-4 animate-slide-up-fade">
       {/* Patient details */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 gap-3">
         <div className="p-3.5 rounded-xl bg-white border border-slate-200 shadow-sm flex items-start gap-3">
           <div className="w-7 h-7 rounded-lg bg-teal-50 flex items-center justify-center flex-shrink-0">
             <User className="w-3.5 h-3.5 text-teal-600" />
@@ -98,23 +98,28 @@ export function CallDetails({ summary, cost_breakdown }: Props) {
       {/* Cost breakdown */}
       {cost_breakdown && (
         <div>
-          <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wider mb-2 px-0.5">Session Cost</p>
-          <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-sm grid grid-cols-2 gap-3">
+          <div className="flex items-center gap-2 mb-2 px-0.5">
+            <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Session Cost</p>
+            {cost_breakdown.estimated && (
+              <span className="text-[9px] font-medium text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">estimated</span>
+            )}
+          </div>
+          <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-sm grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div>
               <p className="text-[10px] text-slate-400">STT</p>
-              <p className="font-mono text-xs font-medium text-slate-800 mt-0.5">${cost_breakdown.stt_usd.toFixed(4)}</p>
+              <p className="font-mono text-xs font-medium text-slate-800 mt-0.5">{cost_breakdown.estimated ? "~" : ""}${cost_breakdown.stt_usd.toFixed(4)}</p>
             </div>
             <div>
               <p className="text-[10px] text-slate-400">TTS</p>
-              <p className="font-mono text-xs font-medium text-slate-800 mt-0.5">${cost_breakdown.tts_usd.toFixed(4)}</p>
+              <p className="font-mono text-xs font-medium text-slate-800 mt-0.5">{cost_breakdown.estimated ? "~" : ""}${cost_breakdown.tts_usd.toFixed(4)}</p>
             </div>
             <div>
               <p className="text-[10px] text-slate-400">LLM</p>
-              <p className="font-mono text-xs font-medium text-slate-800 mt-0.5">${cost_breakdown.llm_usd.toFixed(4)}</p>
+              <p className="font-mono text-xs font-medium text-slate-800 mt-0.5">{cost_breakdown.estimated ? "~" : ""}${cost_breakdown.llm_usd.toFixed(4)}</p>
             </div>
             <div className="bg-teal-50 rounded-lg p-2 border border-teal-100">
               <p className="text-[10px] text-teal-600">Total</p>
-              <p className="font-mono text-sm font-semibold text-teal-700 mt-0.5">${cost_breakdown.total_usd.toFixed(4)}</p>
+              <p className="font-mono text-sm font-semibold text-teal-700 mt-0.5">{cost_breakdown.estimated ? "~" : ""}${cost_breakdown.total_usd.toFixed(4)}</p>
             </div>
           </div>
         </div>

@@ -27,12 +27,16 @@ export async function fetchSummary(
 }
 
 export async function fetchCallSessions(limit = 25): Promise<CallSessionRow[]> {
-  const res = await fetch(`${API}/api/sessions?limit=${limit}`, {
-    cache: "no-store",
-  });
-  if (!res.ok) throw new Error(`Sessions fetch failed: ${res.status}`);
-  const data: { sessions: CallSessionRow[] } = await res.json();
-  return data.sessions;
+  try {
+    const res = await fetch(`${API}/api/sessions?limit=${limit}`, {
+      cache: "no-store",
+    });
+    if (!res.ok) return [];
+    const data: { sessions: CallSessionRow[] } = await res.json();
+    return data.sessions ?? [];
+  } catch {
+    return [];
+  }
 }
 
 export async function fetchTavusUrl(
@@ -82,8 +86,12 @@ export async function finishSession(sessionId: string, transcript: unknown[] = [
   });
 }
 
-export async function fetchDashboardStats(): Promise<import("@/types").DashboardStats> {
-  const res = await fetch(`${API}/api/analytics/stats`, { cache: "no-store" });
-  if (!res.ok) throw new Error(`Stats fetch failed: ${res.status}`);
-  return res.json();
+export async function fetchDashboardStats(): Promise<import("@/types").DashboardStats | null> {
+  try {
+    const res = await fetch(`${API}/api/analytics/stats`, { cache: "no-store" });
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
 }

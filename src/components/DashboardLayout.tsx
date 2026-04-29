@@ -1,16 +1,30 @@
 "use client";
 
+import { useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
-import { Search, Bell } from "lucide-react";
+import { Search, Bell, Menu } from "lucide-react";
 
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden text-foreground">
-      <Sidebar />
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex h-14 items-center justify-between px-6 bg-white border-b border-slate-200 z-20">
-          <div className="flex items-center gap-3 flex-1">
-            <div className="relative max-w-xs w-full">
+      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+
+      <div className="flex flex-1 flex-col overflow-hidden min-w-0">
+        <header className="flex h-14 items-center justify-between px-4 sm:px-6 bg-white border-b border-slate-200 z-20">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            {/* Hamburger – mobile only */}
+            <button
+              className="lg:hidden p-2 rounded-lg hover:bg-slate-100 transition-colors text-slate-500 hover:text-slate-700 flex-shrink-0"
+              onClick={() => setSidebarOpen(true)}
+              aria-label="Open menu"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+
+            {/* Search – hidden on xs, visible sm+ */}
+            <div className="relative max-w-xs w-full hidden sm:block">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
               <input
                 type="text"
@@ -20,7 +34,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
             <button className="p-2 rounded-lg hover:bg-slate-100 transition-colors text-slate-500 hover:text-slate-700">
               <Bell className="w-4 h-4" />
             </button>
@@ -40,7 +54,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
         </header>
 
         <main className="flex-1 overflow-y-auto custom-scrollbar">
-          <div className="max-w-6xl mx-auto p-6">
+          <div className="max-w-6xl mx-auto p-4 sm:p-6">
             {children}
           </div>
         </main>

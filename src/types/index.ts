@@ -35,6 +35,7 @@ export interface SessionSummaryResponse {
     tts_usd: number;
     llm_usd: number;
     total_usd: number;
+    estimated?: boolean;
   } | null;
   started_at: string;
   ended_at: string | null;

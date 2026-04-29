@@ -253,10 +253,10 @@ export default function CallPage() {
         </div>
 
         {callState === "connected" && (
-          <div className="flex items-center gap-4 px-4 py-3 bg-white border border-slate-200 rounded-xl shadow-sm">
+          <div className="flex items-center gap-3 sm:gap-4 px-4 py-3 bg-white border border-slate-200 rounded-xl shadow-sm self-start sm:self-auto">
             <div>
               <p className="text-[10px] text-slate-400 uppercase tracking-wider">Duration</p>
-              <p className="text-lg font-mono font-semibold text-teal-600 mt-0.5">{formatDuration(callDuration)}</p>
+              <p className="text-base sm:text-lg font-mono font-semibold text-teal-600 mt-0.5">{formatDuration(callDuration)}</p>
             </div>
             <div className="w-px h-8 bg-slate-200" />
             <div className="flex items-center gap-2">
