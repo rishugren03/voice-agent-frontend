@@ -107,7 +107,7 @@ export function HistoryTable({ initialSessions }: { initialSessions: CallSession
                   <td className="px-8 py-6">
                     <div className="flex flex-col gap-1.5">
                       <span className="text-sm font-bold text-white group-hover:text-indigo-400 transition-colors uppercase tracking-tight">
-                        {session.user_id || "GUEST_SESSION"}
+                        {session.user_name || session.user_phone || "GUEST_SESSION"}
                       </span>
                       <div className="flex items-center gap-3">
                         <span className="text-[10px] font-mono text-muted-foreground/60 px-2 py-0.5 rounded bg-white/[0.03] border border-white/5 tracking-tighter">
@@ -137,7 +137,14 @@ export function HistoryTable({ initialSessions }: { initialSessions: CallSession
                       </div>
                       <div className="flex items-center gap-2 text-[11px] font-medium text-emerald-400">
                         <DollarSign className="w-3 h-3" /> 
-                        {session.cost_breakdown ? session.cost_breakdown.total_usd.toFixed(4) : "0.0000"} 
+                        {session.cost_breakdown?.total_usd !== undefined 
+                          ? session.cost_breakdown.total_usd.toFixed(4)
+                          : (
+                              (session.cost_breakdown?.stt_usd || 0) + 
+                              (session.cost_breakdown?.tts_usd || 0) + 
+                              (session.cost_breakdown?.llm_usd || 0)
+                            ).toFixed(4)
+                        } 
                         <span className="text-[9px] text-muted-foreground/40 ml-1 uppercase">Compute</span>
                       </div>
                     </div>
@@ -196,7 +203,16 @@ export function HistoryTable({ initialSessions }: { initialSessions: CallSession
                    <div className="p-5 rounded-2xl bg-white/[0.02] border border-white/[0.05] shadow-sm relative overflow-hidden group">
                       <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                       <p className="text-[9px] text-muted-foreground uppercase font-bold tracking-widest mb-2">Session Compute</p>
-                      <p className="font-bold text-emerald-400 text-lg">${selectedSession.cost_breakdown?.total_usd.toFixed(4) || "0.0000"}</p>
+                      <p className="font-bold text-emerald-400 text-lg">
+                        ${selectedSession.cost_breakdown?.total_usd !== undefined 
+                          ? selectedSession.cost_breakdown.total_usd.toFixed(4)
+                          : (
+                              (selectedSession.cost_breakdown?.stt_usd || 0) + 
+                              (selectedSession.cost_breakdown?.tts_usd || 0) + 
+                              (selectedSession.cost_breakdown?.llm_usd || 0)
+                            ).toFixed(4)
+                        }
+                      </p>
                    </div>
                 </div>
 

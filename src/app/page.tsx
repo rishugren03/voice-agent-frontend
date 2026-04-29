@@ -11,8 +11,51 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { useState, useEffect } from "react";
+import { fetchCallSessions, fetchDashboardStats } from "@/lib/api";
+import { CallSessionRow, DashboardStats } from "@/types";
 
 export default function DashboardPage() {
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [loadingStats, setLoadingStats] = useState(true);
+
+  useEffect(() => {
+    fetchDashboardStats()
+      .then(setStats)
+      .finally(() => setLoadingStats(false));
+  }, []);
+
+  const statCards = [
+    { 
+      label: "Total Interactions", 
+      value: stats ? stats.total_interactions.toLocaleString() : "...", 
+      sub: stats ? `${stats.last_24h_interactions} new` : "...", 
+      icon: PhoneCall, 
+      color: "indigo" 
+    },
+    { 
+      label: "Completion Rate", 
+      value: stats ? `${stats.completion_rate.toFixed(1)}%` : "...", 
+      sub: stats ? "Lifetime" : "...", 
+      icon: Zap, 
+      color: "emerald" 
+    },
+    { 
+      label: "New Leads", 
+      value: stats ? stats.total_leads.toLocaleString() : "...", 
+      sub: "Total Patients", 
+      icon: Users, 
+      color: "violet" 
+    },
+    { 
+      label: "Avg Duration", 
+      value: stats ? `${Math.round(stats.avg_duration_seconds)}s` : "...", 
+      sub: "per call", 
+      icon: Activity, 
+      color: "amber" 
+    },
+  ];
+
   return (
     <div className="space-y-12 animate-slide-up-fade pb-10">
       {/* Welcome Header */}
@@ -22,17 +65,14 @@ export default function DashboardPage() {
            <span className="text-[10px] font-bold uppercase tracking-wider">System Status</span>
         </div>
         <h1 className="text-3xl font-bold tracking-tight text-white leading-none">Dashboard Overview</h1>
-        <p className="text-muted-foreground text-sm font-medium">Maya agents have handled <span className="text-white">124 interactions</span> in the last 24 hours.</p>
+        <p className="text-muted-foreground text-sm font-medium">
+          Maya agents have handled <span className="text-white">{stats?.last_24h_interactions || "..."} interactions</span> in the last 24 hours.
+        </p>
       </div>
 
       {/* Primary Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {[
-          { label: "Total Interactions", value: "2,842", sub: "+12.5%", icon: PhoneCall, color: "indigo" },
-          { label: "Completion Rate", value: "98.2%", sub: "+0.4%", icon: Zap, color: "emerald" },
-          { label: "New Leads", value: "156", sub: "+18", icon: Users, color: "violet" },
-          { label: "Avg Latency", value: "420ms", sub: "-15ms", icon: Activity, color: "amber" },
-        ].map((stat, i) => (
+        {statCards.map((stat, i) => (
           <div key={i} className="p-6 rounded-2xl glass-panel hover:border-indigo-500/30 transition-colors relative overflow-hidden">
             <div className="flex items-center justify-between mb-4">
               <div className={cn(
@@ -41,10 +81,7 @@ export default function DashboardPage() {
               )}>
                 <stat.icon className="w-5 h-5" />
               </div>
-              <span className={cn(
-                  "text-[10px] font-bold",
-                  stat.sub.startsWith("+") ? "text-emerald-400" : "text-amber-400"
-              )}>{stat.sub}</span>
+              <span className="text-[10px] font-bold text-emerald-400">{stat.sub}</span>
             </div>
             <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">{stat.label}</p>
             <p className="text-2xl font-bold text-white tracking-tight">{stat.value}</p>
@@ -120,27 +157,80 @@ export default function DashboardPage() {
                     <Link href="/call-sessions" className="text-[10px] font-bold text-indigo-400 hover:underline">View All</Link>
                 </div>
                 
-                <div className="space-y-4">
-                    {[
-                        { title: "Lead Identified", meta: "Sam Davies", time: "2m ago", type: "success" },
-                        { title: "Action Performed", meta: "Appointments.SlotFetch", time: "5m ago", type: "info" },
-                        { title: "Report Saved", meta: "Session_5028", time: "12m ago", type: "success" }
-                    ].map((item, i) => (
-                        <div key={i} className="flex gap-4 p-2 rounded-xl">
-                            <div className={cn(
-                                "w-1 h-8 rounded-full",
-                                item.type === "success" ? "bg-emerald-500" : "bg-indigo-500"
-                            )} />
-                            <div>
-                                <p className="text-xs font-bold text-white leading-none">{item.title}</p>
-                                <p className="text-[10px] text-muted-foreground mt-1.5">{item.meta} • {item.time}</p>
-                            </div>
-                        </div>
-                    ))}
-                </div>
+                <RecentActivityList />
             </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function RecentActivityList() {
+  const [sessions, setSessions] = useState<CallSessionRow[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchCallSessions(5)
+      .then(setSessions)
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="space-y-4 animate-pulse">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="flex gap-4 p-2">
+            <div className="w-1 h-8 rounded-full bg-white/5" />
+            <div className="flex-1 space-y-2">
+              <div className="h-3 bg-white/5 rounded w-1/2" />
+              <div className="h-2 bg-white/5 rounded w-1/4" />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (sessions.length === 0) {
+    return (
+      <p className="text-[10px] text-muted-foreground italic text-center py-4">
+        No recent activity found.
+      </p>
+    );
+  }
+
+  const getTimeAgo = (dateStr: string) => {
+    const seconds = Math.floor((new Date().getTime() - new Date(dateStr).getTime()) / 1000);
+    if (seconds < 60) return "just now";
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    return new Date(dateStr).toLocaleDateString();
+  };
+
+  return (
+    <div className="space-y-4">
+      {sessions.map((session, i) => {
+        const isSuccess = !!session.ended_at;
+        const title = session.summary?.extracted?.intent 
+          ? `Intent: ${session.summary.extracted.intent}`
+          : session.ended_at ? "Call Completed" : "Live Session";
+        const meta = session.user_name || session.user_phone || "Guest Session";
+        
+        return (
+          <div key={session.id} className="flex gap-4 p-2 rounded-xl group hover:bg-white/[0.02] transition-colors">
+            <div className={cn(
+                "w-1 h-8 rounded-full transition-all group-hover:h-10",
+                isSuccess ? "bg-emerald-500" : "bg-indigo-500"
+            )} />
+            <div>
+                <p className="text-xs font-bold text-white leading-none group-hover:text-indigo-400 transition-colors line-clamp-1">{title}</p>
+                <p className="text-[10px] text-muted-foreground mt-1.5">{meta} • {getTimeAgo(session.started_at)}</p>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

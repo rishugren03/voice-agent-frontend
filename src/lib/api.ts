@@ -81,3 +81,9 @@ export async function finishSession(sessionId: string, transcript: unknown[] = [
     body: JSON.stringify({ transcript }),
   });
 }
+
+export async function fetchDashboardStats(): Promise<import("@/types").DashboardStats> {
+  const res = await fetch(`${API}/api/analytics/stats`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`Stats fetch failed: ${res.status}`);
+  return res.json();
+}

@@ -50,9 +50,19 @@ export interface CallSessionRow {
   id: number;
   session_id: string;
   user_id: number | null;
+  user_phone: string | null;
+  user_name: string | null;
   transcript: TranscriptItem[] | null;
   summary: CallSummary | null;
   cost_breakdown: SessionSummaryResponse["cost_breakdown"];
   started_at: string;
   ended_at: string | null;
+}
+
+export interface DashboardStats {
+  total_interactions: number;
+  completion_rate: number;
+  total_leads: number;
+  avg_duration_seconds: number;
+  last_24h_interactions: number;
 }
