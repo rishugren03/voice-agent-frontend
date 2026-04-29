@@ -59,6 +59,7 @@ export default function CallPage() {
   // Track whether the replica has spoken anything — used to detect if custom_greeting
   // was silently consumed by our call object before the user's iframe loaded.
   const greetingReceivedRef = useRef(false);
+  const iframeJoinedRef = useRef(false);
 
   // Stable refs so Daily app-message closure always calls the latest version.
   const addEventRef = useRef<((e: import("@/types").ToolEvent) => void) | null>(null);
@@ -140,7 +141,7 @@ export default function CallPage() {
     const props = (msg.properties ?? {}) as Record<string, unknown>;
 
     if (eventType === "conversation.replica.started_speaking") {
-      greetingReceivedRef.current = true;
+      if (iframeJoinedRef.current) greetingReceivedRef.current = true;
       markSpeaking();
       return;
     }
@@ -153,7 +154,7 @@ export default function CallPage() {
       const role = props.role === "replica" ? "assistant" : props.role as string;
       const speech = (props.speech ?? props.text) as string | undefined;
       if ((role === "user" || role === "assistant") && typeof speech === "string" && speech.trim()) {
-        if (role === "assistant") greetingReceivedRef.current = true;
+        if (role === "assistant" && iframeJoinedRef.current) greetingReceivedRef.current = true;
         tavusTranscriptRef.current.push({
           role: role as "user" | "assistant",
           content: speech,
@@ -247,15 +248,13 @@ export default function CallPage() {
     setFrozenDuration(0);
     tavusTranscriptRef.current = [];
     greetingReceivedRef.current = false;
+    iframeJoinedRef.current = false;
     sessionIdRef.current = randomRoomName();
 
     try {
       const { conversation_id, conversation_url } = await fetchTavusUrl(sessionIdRef.current);
       tavusConvIdRef.current = conversation_id;
 
-      // Join the Daily room BEFORE setting the iframe URL so our call object
-      // is participant #1. This prevents a second "guest" tile from appearing
-      // when the user's iframe joins later as participant #2.
       const DailyIframe = (await import("@daily-co/daily-js")).default;
       const daily = DailyIframe.createCallObject({ startAudioOff: true, startVideoOff: true });
       daily.on("app-message", (e: { data: unknown }) => handleAppMessage(e.data));
@@ -304,25 +303,23 @@ export default function CallPage() {
     }
   }
 
-  // ── iframe postMessage — "joined-meeting" only ─────────────────────────────
-  // When the user's iframe joins the Daily room, check if the greeting was
-  // silently consumed by our call object and re-trigger it if so.
-
   useEffect(() => {
     function handleMessage(e: MessageEvent) {
-      if (e.data?.action !== "joined-meeting") return;
-      // Give Tavus 1.5s to deliver any pending greeting utterance event.
-      // If none arrives, the custom_greeting was consumed by our silent call
-      // object → re-trigger it via conversation.echo.
-      setTimeout(() => {
-        if (!greetingReceivedRef.current && dailyCallRef.current) {
+      if (e.data?.action === "joined-meeting") {
+        console.log("Daily iframe joined-meeting event fired!");
+        iframeJoinedRef.current = true;
+  
+        if (dailyCallRef.current) {
+          // Force the real greeting since we used a blank one in the backend for the silent observer
           dailyCallRef.current.sendAppMessage({
             message_type: "conversation",
             event_type: "conversation.echo",
-            properties: { modality: "text", text: GREETING },
+            conversation_id: tavusConvIdRef.current,
+            properties: { text: GREETING },
           }, "*");
+          console.log("Sent manual greeting echo");
         }
-      }, 1500);
+      }
     }
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
